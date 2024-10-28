@@ -1,0 +1,4 @@
+/node_modules/
+/chats/*
+.env
+/index.js
