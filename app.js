@@ -137,7 +137,7 @@ class ChatImporter {
                     await this.bot.telegram.sendVoice(this.chatId, { source: filePath }, options);
                     break;
             }
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            await new Promise(resolve => setTimeout(resolve, 500));
         } catch (error) {
             console.error(`Error sending attachment: ${error.message}`);
         }
@@ -153,7 +153,7 @@ class ChatImporter {
                 { parse_mode: 'HTML' }
             );
             console.log(`Sent message from ${sender} on ${date}`);
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            await new Promise(resolve => setTimeout(resolve, 500));
         } catch (error) {
             console.error(`Error sending message: ${error.message}`);
         }
