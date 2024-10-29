@@ -1,4 +1,4 @@
-require('dotenv');
+require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const fs = require("fs");
 const path = require("path");
@@ -173,7 +173,7 @@ class TelegramImporterBot {
 
             const chatFolders = this.getChatFolders();
             if (chatFolders.length === 0) {
-                console.log("No chat folders found.");
+                console.log("No chat folders found in 'chats' directory.");
                 return;
             }
 
@@ -205,16 +205,25 @@ class TelegramImporterBot {
     }
 
     getChatFolders() {
-        return fs.readdirSync('.')
+        const chatsDir = path.join('.', 'chats'); // Path to the "chats" folder
+        if (!fs.existsSync(chatsDir)) {
+            console.log("The 'chats' directory does not exist.");
+            return [];
+        }
+        
+        return fs.readdirSync(chatsDir)
             .filter(folder => {
                 try {
-                    const isDirectory = fs.lstatSync(folder).isDirectory();
-                    const hasChatFile = fs.existsSync(path.join("chats/" + folder, '_chat.txt'));
-                    return folder !== 'node_modules' && isDirectory && hasChatFile;
+                    const folderPath = path.join(chatsDir, folder);
+                    const isDirectory = fs.lstatSync(folderPath).isDirectory();
+                    const hasChatFile = fs.existsSync(path.join(folderPath, '_chat.txt'));
+                    return isDirectory && hasChatFile;
                 } catch (error) {
+                    console.error(`Error reading folder ${folder}: ${error.message}`);
                     return false;
                 }
-            });
+            })
+            .map(folder => path.join(chatsDir, folder)); // Return full paths of chat folders
     }
 
     async setupImporters(folders) {
