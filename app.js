@@ -7,24 +7,50 @@ const moment = require('moment');
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
 class ChatImporter {
-    constructor(chatFolder, chatId, bot) {
+    constructor(chatFolder, bot) {
         this.chatFolder = chatFolder;
-        this.chatId = chatId;
         this.bot = bot;
-        this.currentLine = this.loadProgress();
+        const progressData = this.loadProgress();
+        this.currentLine = progressData.currentLine;
+        this.completed = progressData.completed;
+        this.chatId = progressData.chatId; // Load the chat ID if it exists
         this.txtFilePath = path.join(chatFolder, '_chat.txt');
     }
 
     loadProgress() {
         const progressPath = path.join(this.chatFolder, 'progress.json');
-        return fs.existsSync(progressPath)
-            ? JSON.parse(fs.readFileSync(progressPath, 'utf-8')).currentLine || 0
-            : 0;
+        if (fs.existsSync(progressPath)) {
+            const data = JSON.parse(fs.readFileSync(progressPath, 'utf-8'));
+            return {
+                currentLine: data.currentLine || 0,
+                completed: data.completed || false,
+                chatId: data.chatId || null
+            };
+        }
+        return { currentLine: 0, completed: false, chatId: null };
     }
 
     saveProgress() {
         const progressPath = path.join(this.chatFolder, 'progress.json');
-        fs.writeFileSync(progressPath, JSON.stringify({ currentLine: this.currentLine }), 'utf-8');
+        fs.writeFileSync(progressPath, JSON.stringify({
+            currentLine: this.currentLine,
+            completed: this.completed,
+            chatId: this.chatId
+        }), 'utf-8');
+    }
+
+    markAsCompleted() {
+        this.completed = true;
+        this.saveProgress();
+    }
+
+    async setChatId() {
+        if (!this.chatId) {
+            console.log(`Enter the chat ID for folder '${this.chatFolder}':`);
+            const chatId = await TelegramImporterBot.getUserInput();
+            this.chatId = chatId;
+            this.saveProgress();
+        }
     }
 
     formatDate(dateStr) {
@@ -32,6 +58,12 @@ class ChatImporter {
     }
 
     async importMessages() {
+        await this.setChatId(); // Ensure chat ID is set before importing
+        if (this.completed) {
+            console.log(`Skipping '${this.chatFolder}' as it is already imported.`);
+            return "completed"; // Return flag to indicate a completed chat
+        }
+
         if (!fs.existsSync(this.txtFilePath)) {
             console.error(`Chat file not found in ${this.chatFolder}`);
             return;
@@ -87,6 +119,7 @@ class ChatImporter {
             }
 
             console.log(`Completed import for ${this.chatFolder}`);
+            this.markAsCompleted(); // Mark as completed when finished
         } catch (error) {
             console.error(`Error during import: ${error.message}`);
         } finally {
@@ -137,7 +170,7 @@ class ChatImporter {
                     await this.bot.telegram.sendVoice(this.chatId, { source: filePath }, options);
                     break;
             }
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 3000));
         } catch (error) {
             console.error(`Error sending attachment: ${error.message}`);
         }
@@ -153,7 +186,7 @@ class ChatImporter {
                 { parse_mode: 'HTML' }
             );
             console.log(`Sent message from ${sender} on ${date}`);
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 3000));
         } catch (error) {
             console.error(`Error sending message: ${error.message}`);
         }
@@ -181,7 +214,7 @@ class TelegramImporterBot {
             chatFolders.forEach((folder, idx) => console.log(`${idx + 1}. ${folder}`));
             console.log("\nEnter folder numbers (comma-separated) or 'a' for all:");
 
-            const selectedFolders = await this.getUserInput();
+            const selectedFolders = await TelegramImporterBot.getUserInput();
             const foldersToProcess = selectedFolders.toLowerCase() === 'a' 
                 ? chatFolders 
                 : selectedFolders.split(',')
@@ -228,20 +261,25 @@ class TelegramImporterBot {
 
     async setupImporters(folders) {
         for (const folder of folders) {
-            console.log(`\nEnter the chat ID for folder '${folder}':`);
-            const chatId = await this.getUserInput();
-            this.importers.push(new ChatImporter(folder, chatId, this.bot));
+            const importer = new ChatImporter(folder, this.bot);
+            await importer.setChatId(); // Prompt for chat ID if not already set
+            this.importers.push(importer);
         }
     }
 
     async runImporters() {
         for (const importer of this.importers) {
             console.log(`\nProcessing folder: ${importer.chatFolder}`);
-            await importer.importMessages();
+            const result = await importer.importMessages();
+            
+            if (result === "completed" && this.importers.length === 1) {
+                console.log(`Chat '${importer.chatFolder}' already completed. Exiting.`);
+                process.exit(0);
+            }
         }
     }
 
-    getUserInput() {
+    static getUserInput() {
         const rl = readline.createInterface({ 
             input: process.stdin, 
             output: process.stdout 
@@ -256,6 +294,7 @@ class TelegramImporterBot {
     }
 }
 
+// Initialize and start the bot
 const importerBot = new TelegramImporterBot(BOT_TOKEN);
 importerBot.start().catch(error => {
     console.error('Fatal error:', error);
