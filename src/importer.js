@@ -130,7 +130,8 @@ class ChatImporter {
             sticker: /(STK-\d{8}-WA\d+\.webp)/,
             photo: /(IMG-\d{8}-WA\d+\.(jpg|jpeg|png))/, 
             video: /(VID-\d{8}-WA\d+\.mp4)/,
-            audio: /(PTT-\d{8}-WA\d+\.opus)/
+            audio: /(PTT-\d{8}-WA\d+\.opus)/,
+            document: /([A-Z]+-\d{8}-WA\d+\.[^\/\\]+$)/,
         };
 
         for (const [type, pattern] of Object.entries(patterns)) {
@@ -171,6 +172,8 @@ class ChatImporter {
                 case 'audio':
                     await this.bot.telegram.sendVoice(this.chatId, { source: filePath }, options);
                     break;
+                case 'document':
+                    await this.bot.telegram.sendDocument(this.chatId, { source: filePath }, options);
             }
             await new Promise(resolve => setTimeout(resolve, 3000));
         } catch (error) {
@@ -182,6 +185,12 @@ class ChatImporter {
         if (!message.trim()) return;
 
         if (message.includes('<Media omitted>')) return;
+
+        if(message.includes('<This message was edited>'))
+        {
+            message = message.replace('<This message was edited>', '');
+            message = `<i>${message}</i>`
+        }
         
         try {
             await this.bot.telegram.sendMessage(
